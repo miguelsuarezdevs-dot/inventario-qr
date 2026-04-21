@@ -19,7 +19,21 @@ class EscanerController extends Controller
             'codigo' => 'required|string'
         ]);
 
-        $producto = Producto::where('codigo_qr', $request->codigo)->first();
+        $partes = explode('|', $request->codigo);
+
+        if (count($partes) < 7) {
+            return response()->json([
+                'success' => false,
+                'message' => 'QR inválido'
+            ], 400);
+        }
+
+        $remesaId = $partes[4];
+        $numeroUnidad = (int) $partes[5];
+
+        $producto = Producto::where('remesa_id', $remesaId)
+            ->where('numero_unidad', $numeroUnidad)
+            ->first();
 
         if (!$producto) {
             return response()->json([
@@ -28,22 +42,35 @@ class EscanerController extends Controller
             ], 404);
         }
 
-        // Obtener todas las unidades de la misma remesa
-        $unidadesRemesa = Producto::where('remesa_id', $producto->remesa_id)
-            ->orderBy('numero_unidad')
-            ->get();
+        // 🚫 Evitar doble escaneo
+        if ($producto->estado === 'entregado') {
+            return response()->json([
+                'success' => false,
+                'message' => "⚠️ Unidad {$producto->numero_unidad} ya fue escaneada"
+            ], 400);
+        }
 
-        // Contar escaneadas vs pendientes
+        // ✅ Marcar automáticamente
+        $producto->estado = 'entregado';
+        $producto->save();
+
+        Movimiento::create([
+            'producto_id' => $producto->id,
+            'user_id' => auth()->id(),
+            'tipo' => 'entregado',
+            'cantidad' => 1,
+            'observacion' => "Auto-scan unidad {$producto->numero_unidad}"
+        ]);
+
+        $unidadesRemesa = Producto::where('remesa_id', $remesaId)->get();
+
         $escaneadas = $unidadesRemesa->where('estado', 'entregado')->count();
         $pendientes = $unidadesRemesa->where('estado', 'activo')->count();
 
-        // Lista de unidades faltantes
-        $faltantes = [];
-        foreach ($unidadesRemesa as $unidad) {
-            if ($unidad->estado === 'activo') {
-                $faltantes[] = $unidad->numero_unidad;
-            }
-        }
+        $faltantes = $unidadesRemesa
+            ->where('estado', 'activo')
+            ->pluck('numero_unidad')
+            ->values();
 
         return response()->json([
             'success' => true,
@@ -52,17 +79,15 @@ class EscanerController extends Controller
                 'remesa' => $producto->remesa,
                 'sucursal' => $producto->sucursal,
                 'destinatario' => $producto->destinatario,
-                'direccion' => $producto->direccion,
                 'ciudad' => $producto->ciudad,
                 'cliente' => $producto->cliente,
-                'documento' => $producto->documento,
-                'fecha' => $producto->fecha->format('d/m/Y'),
-                'estado' => $producto->estado,
                 'numero_unidad' => $producto->numero_unidad,
                 'total_unidades' => $producto->total_unidades,
+                'estado' => $producto->estado,
                 'escaneadas' => $escaneadas,
                 'pendientes' => $pendientes,
-                'faltantes' => $faltantes
+                'faltantes' => $faltantes,
+                'remesa_id' => $producto->remesa_id
             ]
         ]);
     }
@@ -74,7 +99,7 @@ class EscanerController extends Controller
             ->get();
 
         if ($unidades->isEmpty()) {
-            return response()->json(['success' => false, 'message' => 'Remesa no encontrada'], 404);
+            return response()->json(['success' => false], 404);
         }
 
         $primera = $unidades->first();
@@ -93,60 +118,6 @@ class EscanerController extends Controller
                     'estado' => $u->estado
                 ];
             })
-        ]);
-    }
-
-    public function procesar(Request $request)
-    {
-        $request->validate([
-            'producto_id' => 'required|exists:productos,id',
-            'accion' => 'required|in:entregado,devuelto'
-        ]);
-
-        $producto = Producto::find($request->producto_id);
-
-        if ($request->accion === 'entregado' && $producto->estado === 'entregado') {
-            return response()->json([
-                'success' => false,
-                'message' => '❌ Esta unidad ya fue entregada anteriormente'
-            ], 400);
-        }
-
-        if ($request->accion === 'devuelto' && $producto->estado === 'devuelto') {
-            return response()->json([
-                'success' => false,
-                'message' => '❌ Esta unidad ya fue devuelta anteriormente'
-            ], 400);
-        }
-
-        $producto->estado = $request->accion;
-        $producto->save();
-
-        Movimiento::create([
-            'producto_id' => $producto->id,
-            'user_id' => auth()->id(),
-            'tipo' => $request->accion,
-            'cantidad' => 1,
-            'observacion' => "Unidad {$producto->numero_unidad} de {$producto->total_unidades}"
-        ]);
-
-        // Obtener estadísticas actualizadas
-        $unidadesRemesa = Producto::where('remesa_id', $producto->remesa_id)->get();
-        $escaneadas = $unidadesRemesa->where('estado', 'entregado')->count();
-        $pendientes = $unidadesRemesa->where('estado', 'activo')->count();
-
-        $mensaje = $request->accion === 'entregado'
-            ? "✅ Unidad {$producto->numero_unidad} de {$producto->total_unidades} entregada"
-            : "✅ Unidad {$producto->numero_unidad} de {$producto->total_unidades} devuelta";
-
-        return response()->json([
-            'success' => true,
-            'message' => $mensaje,
-            'estado' => $producto->estado,
-            'numero_unidad' => $producto->numero_unidad,
-            'total_unidades' => $producto->total_unidades,
-            'escaneadas' => $escaneadas,
-            'pendientes' => $pendientes
         ]);
     }
 }

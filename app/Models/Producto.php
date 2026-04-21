@@ -18,8 +18,12 @@ class Producto extends Model
         'cliente',
         'documento',
         'fecha',
-        'estado'
+        'estado',
+        'numero_unidad',
+        'total_unidades', // 👈 ESTA LÍNEA ES CLAVE
+        'remesa_id',
     ];
+    
     
     protected $casts = [
         'fecha' => 'date',
