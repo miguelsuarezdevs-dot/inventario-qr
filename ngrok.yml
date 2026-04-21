@@ -1,0 +1,9 @@
+version: 2
+# Si no tienes auth global, descomenta y pega tu token:
+# authtoken: TU_TOKEN
+tunnels:
+  app:
+    proto: http
+    addr: 80
+    host_header: inventario-qr.test
+    inspect: false

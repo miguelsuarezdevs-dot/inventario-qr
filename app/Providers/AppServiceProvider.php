@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -17,8 +18,15 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
+
     public function boot(): void
     {
-        //
+        // Detrás de túneles HTTPS (ngrok/localtunnel), Laravel puede detectar HTTP internamente.
+        // Si APP_URL es https, forzamos esquema https para evitar mixed-content en assets.
+        $appUrl = (string) config('app.url');
+        if (str_starts_with($appUrl, 'https://')) {
+            URL::forceScheme('https');
+        }
     }
+   
 }

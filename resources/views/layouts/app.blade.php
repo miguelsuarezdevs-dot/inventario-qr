@@ -5,7 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Inventario QR - @yield('title')</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    @if (app()->environment('local'))
+        {{-- Fallback para túneles (localtunnel/ngrok) cuando assets locales fallan --}}
+        <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    @endif
+
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-gray-100">
 
