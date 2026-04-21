@@ -11,27 +11,21 @@ return new class extends Migration
         Schema::create('productos', function (Blueprint $table) {
             $table->id();
             
-            // Código QR único
+            // Código QR único por unidad
             $table->string('codigo_qr')->unique();
             
-            // Tus 12 campos
-            $table->string('remesa');
-            $table->integer('unidades_iniciales');
+            // Datos del producto
+            $table->string('remesa');           // Solo números
+            $table->string('sucursal', 3);      // 3 letras (BAR, SUL, etc)
             $table->string('destinatario');
-            $table->string('sucursal')->nullable();
-            $table->text('direccion')->nullable();
+            $table->text('direccion');
             $table->string('ciudad');
             $table->string('cliente');
-            $table->text('observacion')->nullable();
-            $table->text('documentos')->nullable();
-            $table->string('zona')->nullable();
-            $table->string('ruta')->nullable();
-            $table->date('elaboracion');
+            $table->string('documento')->nullable();
+            $table->date('fecha');
             
-            // Campos de inventario
-            $table->integer('unidades_actuales');
-            $table->string('ubicacion_actual')->default('Bodega Principal');
-            $table->enum('estado', ['activo', 'en_transito', 'entregado', 'parcial'])->default('activo');
+            // Estado del producto (activo, entregado, devuelto)
+            $table->enum('estado', ['activo', 'entregado', 'devuelto'])->default('activo');
             
             $table->timestamps();
         });

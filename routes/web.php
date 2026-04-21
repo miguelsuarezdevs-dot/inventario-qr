@@ -1,44 +1,43 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\EscanerController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect('/login');
 });
 
-// === RUTA DEL DASHBOARD (modificada) ===
 Route::get('/dashboard', function () {
     return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware(['auth'])->name('dashboard');
 
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+Route::middleware(['auth'])->group(function () {
+    // Productos (solo admin)
+    Route::get('/productos/crear', [ProductoController::class, 'create'])
+        ->name('productos.crear')
+        ->middleware('can:crear_productos');
+
+    Route::post('/productos', [ProductoController::class, 'store'])
+        ->name('productos.store')
+        ->middleware('can:crear_productos');
 
     // Escáner
-    Route::get('/escaner', [App\Http\Controllers\EscanerController::class, 'index'])
+    Route::get('/escaner', [EscanerController::class, 'index'])
         ->name('escaner')
         ->middleware('can:escanear_qr');
 
-    Route::post('/escaner/buscar', [App\Http\Controllers\EscanerController::class, 'buscar'])
+    Route::post('/escaner/buscar', [EscanerController::class, 'buscar'])
+        ->name('escaner.buscar')
         ->middleware('can:escanear_qr');
 
-    Route::post('/escaner/procesar', [App\Http\Controllers\EscanerController::class, 'procesar'])
+    Route::post('/escaner/procesar', [EscanerController::class, 'procesar'])
+        ->name('escaner.procesar')
         ->middleware('can:escanear_qr');
+
+        Route::get('/escaner/remesa/{remesaId}', [EscanerController::class, 'estadoRemesa'])
+        ->middleware('auth')
+        ->name('escaner.remesa');
 });
-
-
-// Productos (solo admin puede crear)
-Route::get('/productos/crear', [App\Http\Controllers\ProductoController::class, 'create'])
-    ->name('productos.crear')
-    ->middleware('can:crear_productos');
-
-Route::post('/productos', [App\Http\Controllers\ProductoController::class, 'store'])
-    ->name('productos.store')
-    ->middleware('can:crear_productos');
-
-Route::get('/productos/buscar/{codigo}', [App\Http\Controllers\ProductoController::class, 'buscarPorQR']);
 
 require __DIR__ . '/auth.php';

@@ -3,99 +3,114 @@
 @section('title', 'Escanear QR')
 
 @section('content')
-<div class="bg-white rounded-lg shadow p-6">
-    <h1 class="text-2xl font-bold mb-4">📷 Escanear Código QR</h1>
+<div class="card">
+    <div class="card-header">📷 Escanear Código QR</div>
     
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {{-- Lado izquierdo: Escáner --}}
+    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <!-- Lado izquierdo: Escáner -->
         <div>
-            <div class="bg-gray-100 rounded-lg p-4">
-                <div id="reader" style="width: 100%;"></div>
-                <p class="text-sm text-gray-500 text-center mt-2">
-                    Acerca el código QR a la cámara
-                </p>
-            </div>
+            <div id="reader" style="width: 100%;"></div>
+            <p class="text-gray text-center" style="margin-top: 10px;">
+                Acerca el código QR a la cámara
+            </p>
             
-            <div class="mt-4">
-                <label class="block text-sm font-medium mb-1">O ingresar código manual:</label>
-                <div class="flex gap-2">
-                    <input type="text" id="codigo_manual" placeholder="Escribe o pega el código QR" 
-                           class="flex-1 border rounded-lg p-2">
-                    <button onclick="buscarManual()" 
-                            class="bg-gray-500 hover:bg-gray-600 text-white px-4 rounded-lg">
-                        Buscar
-                    </button>
+            <div style="margin-top: 15px;">
+                <label>O ingresar código manual:</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <input type="text" id="codigo_manual" placeholder="Pega el código QR aquí" style="flex: 1;">
+                    <button onclick="buscarManual()" class="btn btn-info">Buscar</button>
                 </div>
             </div>
         </div>
         
-        {{-- Lado derecho: Resultado --}}
+        <!-- Lado derecho: Resultado del último escaneo -->
         <div>
-            <div id="resultado" class="hidden">
-                <div class="border rounded-lg p-4 bg-blue-50">
-                    <h3 class="font-bold text-lg mb-3">📦 Producto encontrado</h3>
-                    
-                    <div id="info_producto" class="space-y-2 mb-4"></div>
-                    
-                    <div class="border-t pt-4 mt-4">
-                        <label class="block text-sm font-medium mb-2">Cantidad:</label>
-                        <div class="flex gap-2">
-                            <input type="number" id="cantidad" value="1" min="1" 
-                                   class="w-32 border rounded-lg p-2 text-center">
-                            <button onclick="actualizarStock('entrada')" 
-                                    class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg">
-                                ➕ Agregar
-                            </button>
-                            <button onclick="actualizarStock('salida')" 
-                                    class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg">
-                                ➖ Retirar
-                            </button>
-                        </div>
-                    </div>
+            <div id="resultado" style="display: none;">
+                <div style="background: #e8f4f8; border-radius: 10px; padding: 15px;">
+                    <h3 style="margin-bottom: 15px;">📦 Producto escaneado</h3>
+                    <div id="info_producto" style="margin-bottom: 15px;"></div>
+                    <div id="botones_accion"></div>
                 </div>
             </div>
             
-            <div id="loading" class="hidden text-center py-8">
-                <div class="text-gray-500">Buscando producto...</div>
+            <div id="loading" style="display: none; text-align: center; padding: 40px;">
+                <div>🔍 Buscando producto...</div>
             </div>
+        </div>
+    </div>
+    
+    <!-- Panel de estado de la remesa actual -->
+    <div id="panel_remesa" style="display: none; margin-top: 20px;">
+        <div class="card">
+            <div class="card-header">📊 Estado de la Remesa</div>
+            <div id="estado_remesa"></div>
         </div>
     </div>
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
-    let productoActual = null;
+    let remesaActualId = null;
+    let scanner = null;
+    let escaneando = true;
+    
+    // Sonido beep
+    function playBeep() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 880;
+            gainNode.gain.value = 0.3;
+            
+            oscillator.start();
+            setTimeout(() => {
+                oscillator.stop();
+                audioContext.close();
+            }, 200);
+        } catch(e) {
+            console.log('Sonido no disponible');
+        }
+    }
     
     // Inicializar escáner
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        rememberLastUsedCamera: true,
-        showTorchButtonIfSupported: true,
-        // Desactiva completamente el modo "subir imagen" y deja solo cámara.
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-    });
-    
-    function onScanSuccess(decodedText, decodedResult) {
-        // Detener escáner temporalmente
-        html5QrcodeScanner.pause();
+    function iniciarEscaner() {
+        if (scanner) {
+            scanner.clear();
+        }
         
-        // Buscar producto
+        scanner = new Html5QrcodeScanner("reader", { 
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            rememberLastUsedCamera: true,
+            showTorchButtonIfSupported: true
+        });
+        
+        scanner.render(onScanSuccess, onScanError);
+    }
+    
+    function onScanSuccess(decodedText) {
+        if (!escaneando) return;
+        
+        playBeep();
+        escaneando = false;
+        scanner.pause();
         buscarProducto(decodedText);
     }
-
-    function onScanError(errorMessage) {
-        // Ignoramos errores de lectura intermitentes para no saturar la UI.
+    
+    function onScanError(error) {
+        // No hacer nada
     }
-
-    // Iniciar cámara + lector QR al cargar la vista.
-    html5QrcodeScanner.render(onScanSuccess, onScanError);
     
     function buscarProducto(codigo) {
-        document.getElementById('loading').classList.remove('hidden');
-        document.getElementById('resultado').classList.add('hidden');
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('resultado').style.display = 'none';
         
-        fetch('/escaner/buscar', {
+        fetch('{{ route("escaner.buscar") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -105,47 +120,209 @@
         })
         .then(response => response.json())
         .then(data => {
-            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('loading').style.display = 'none';
             
             if (data.success) {
-                productoActual = data.producto;
-                mostrarProducto(productoActual);
+                mostrarProducto(data.producto);
+                
+                // Si cambió la remesa, cargar su estado
+                if (data.producto.remesa_id !== remesaActualId) {
+                    remesaActualId = data.producto.remesa_id;
+                    cargarEstadoRemesa(remesaActualId);
+                } else {
+                    // Si es la misma remesa, recargar estado
+                    cargarEstadoRemesa(remesaActualId);
+                }
             } else {
-                alert('❌ Producto no encontrado en el sistema');
-                // Reactivar escáner
-                html5QrcodeScanner.resume();
+                alert('❌ ' + data.message);
+                reactivarEscaner();
             }
         })
         .catch(error => {
-            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('loading').style.display = 'none';
             alert('Error al buscar el producto');
-            html5QrcodeScanner.resume();
+            reactivarEscaner();
         });
     }
     
+    function reactivarEscaner() {
+        escaneando = true;
+        scanner.resume();
+        document.getElementById('resultado').style.display = 'none';
+    }
+    
     function mostrarProducto(producto) {
-        document.getElementById('resultado').classList.remove('hidden');
+        document.getElementById('resultado').style.display = 'block';
         
+        let estadoTexto = '';
         let estadoColor = '';
+        
         switch(producto.estado) {
-            case 'activo': estadoColor = 'text-green-600'; break;
-            case 'entregado': estadoColor = 'text-gray-600'; break;
-            case 'parcial': estadoColor = 'text-yellow-600'; break;
-            default: estadoColor = 'text-blue-600';
+            case 'activo':
+                estadoTexto = '✅ PENDIENTE';
+                estadoColor = '#28a745';
+                break;
+            case 'entregado':
+                estadoTexto = '📦 ENTREGADO';
+                estadoColor = '#6c757d';
+                break;
+            case 'devuelto':
+                estadoTexto = '↩️ DEVUELTO';
+                estadoColor = '#dc3545';
+                break;
         }
         
         document.getElementById('info_producto').innerHTML = `
-            <p><strong>📌 Remesa:</strong> ${producto.remesa}</p>
-            <p><strong>🏢 Cliente:</strong> ${producto.cliente}</p>
+            <p><strong>📦 Remesa:</strong> ${producto.remesa}</p>
+            <p><strong>🏢 Sucursal:</strong> ${producto.sucursal}</p>
+            <p><strong>🔢 Unidad:</strong> ${producto.numero_unidad} de ${producto.total_unidades}</p>
             <p><strong>👤 Destinatario:</strong> ${producto.destinatario}</p>
             <p><strong>📍 Ciudad:</strong> ${producto.ciudad}</p>
-            <p><strong>🏠 Ubicación:</strong> ${producto.ubicacion}</p>
-            <p><strong>📊 Stock actual:</strong> <span class="text-xl font-bold">${producto.unidades_actuales}</span> unidades</p>
-            <p><strong>📌 Estado:</strong> <span class="${estadoColor} font-bold">${producto.estado.toUpperCase()}</span></p>
+            <p><strong>🏠 Cliente:</strong> ${producto.cliente}</p>
+            <p><strong>📌 Estado:</strong> <span style="color: ${estadoColor}; font-weight: bold;">${estadoTexto}</span></p>
         `;
         
-        // Resetear cantidad
-        document.getElementById('cantidad').value = 1;
+        let botones = '';
+        if (producto.estado === 'activo') {
+            botones = `
+                <button onclick="procesarAccion('entregado')" class="btn btn-primary" style="width: 100%;">
+                    ✅ Marcar como Entregado
+                </button>
+            `;
+        } else if (producto.estado === 'entregado') {
+            botones = `
+                <button onclick="procesarAccion('devuelto')" class="btn btn-danger" style="width: 100%;">
+                    ↩️ Marcar como Devuelto
+                </button>
+            `;
+        } else {
+            botones = `
+                <div style="background: #f8d7da; padding: 10px; border-radius: 5px; text-align: center;">
+                    ⚠️ Esta unidad ya fue procesada
+                </div>
+                <button onclick="reactivarEscaner()" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+                    🔄 Escanear siguiente
+                </button>
+            `;
+        }
+        document.getElementById('botones_accion').innerHTML = botones;
+    }
+    
+    function cargarEstadoRemesa(remesaId) {
+        fetch(`/escaner/remesa/${remesaId}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarEstadoRemesa(data);
+                document.getElementById('panel_remesa').style.display = 'block';
+            }
+        });
+    }
+    
+    function mostrarEstadoRemesa(data) {
+        const faltantes = data.unidades.filter(u => u.estado === 'activo');
+        const entregadas = data.unidades.filter(u => u.estado === 'entregado');
+        const devueltas = data.unidades.filter(u => u.estado === 'devuelto');
+        
+        let faltantesHtml = '';
+        if (faltantes.length > 0) {
+            faltantesHtml = `
+                <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 15px; margin-top: 10px;">
+                    <strong>⚠️ UNIDADES FALTANTES POR ESCANEAR:</strong>
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+                        ${faltantes.map(u => `
+                            <div style="background: #ffc107; padding: 8px 12px; border-radius: 5px; font-weight: bold;">
+                                🎫 Unidad ${u.numero_unidad}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        } else {
+            faltantesHtml = `
+                <div style="background: #d4edda; border: 1px solid #28a745; border-radius: 5px; padding: 15px; margin-top: 10px;">
+                    ✅ ¡TODAS LAS UNIDADES HAN SIDO ENTREGADAS!
+                </div>
+            `;
+        }
+        
+        const porcentaje = (entregadas.length / data.total_unidades) * 100;
+        
+        document.getElementById('estado_remesa').innerHTML = `
+            <div style="margin-bottom: 15px;">
+                <p><strong>📦 Remesa:</strong> ${data.remesa}</p>
+                <p><strong>🏢 Sucursal:</strong> ${data.sucursal}</p>
+                <p><strong>👤 Destinatario:</strong> ${data.destinatario}</p>
+                <p><strong>📍 Ciudad:</strong> ${data.ciudad}</p>
+            </div>
+            
+            <div style="margin: 15px 0;">
+                <strong>📊 PROGRESO:</strong>
+                <div style="background: #e9ecef; border-radius: 10px; height: 25px; margin-top: 5px;">
+                    <div style="background: #28a745; width: ${porcentaje}%; height: 25px; border-radius: 10px; text-align: center; color: white; font-size: 12px; line-height: 25px;">
+                        ${entregadas.length}/${data.total_unidades} entregadas
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 20px; margin: 15px 0;">
+                <div style="background: #d4edda; padding: 10px; border-radius: 5px; flex: 1; text-align: center;">
+                    <strong>✅ Entregadas</strong><br>
+                    <span style="font-size: 24px;">${entregadas.length}</span>
+                </div>
+                <div style="background: #fff3cd; padding: 10px; border-radius: 5px; flex: 1; text-align: center;">
+                    <strong>⏳ Pendientes</strong><br>
+                    <span style="font-size: 24px;">${faltantes.length}</span>
+                </div>
+                <div style="background: #f8d7da; padding: 10px; border-radius: 5px; flex: 1; text-align: center;">
+                    <strong>↩️ Devueltas</strong><br>
+                    <span style="font-size: 24px;">${devueltas.length}</span>
+                </div>
+            </div>
+            
+            ${faltantesHtml}
+        `;
+    }
+    
+    function procesarAccion(accion) {
+        fetch('{{ route("escaner.procesar") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({
+                producto_id: document.getElementById('info_producto').getAttribute('data-producto-id') || 
+                    (() => { 
+                        const id = prompt('Ingrese el ID del producto:');
+                        return id;
+                    })()
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                playBeep();
+                alert(data.message);
+                // Recargar estado
+                cargarEstadoRemesa(remesaActualId);
+                reactivarEscaner();
+            } else {
+                alert('❌ ' + data.message);
+                reactivarEscaner();
+            }
+        });
+    }
+    
+    // Guardar producto ID al mostrar
+    function mostrarProductoConId(producto) {
+        document.getElementById('info_producto').setAttribute('data-producto-id', producto.id);
+        mostrarProducto(producto);
     }
     
     function buscarManual() {
@@ -157,56 +334,7 @@
         }
     }
     
-    function actualizarStock(accion) {
-        if (!productoActual) {
-            alert('Primero escanea un producto');
-            return;
-        }
-        
-        const cantidad = parseInt(document.getElementById('cantidad').value);
-        
-        if (!cantidad || cantidad < 1) {
-            alert('Ingresa una cantidad válida');
-            return;
-        }
-        
-        // Deshabilitar botones temporalmente
-        const btns = document.querySelectorAll('#resultado button');
-        btns.forEach(btn => btn.disabled = true);
-        
-        fetch('/escaner/procesar', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({
-                producto_id: productoActual.id,
-                accion: accion,
-                cantidad: cantidad
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message);
-                // Actualizar stock mostrado
-                productoActual.unidades_actuales = data.stock_actual;
-                productoActual.estado = data.estado;
-                mostrarProducto(productoActual);
-                
-                // Reactivar escáner para nuevo escaneo
-                html5QrcodeScanner.resume();
-            } else {
-                alert('❌ ' + data.message);
-            }
-        })
-        .catch(error => {
-            alert('Error al procesar la solicitud');
-        })
-        .finally(() => {
-            btns.forEach(btn => btn.disabled = false);
-        });
-    }
+    // Iniciar
+    iniciarEscaner();
 </script>
 @endsection

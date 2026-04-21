@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Movimiento extends Model
 {
@@ -15,16 +14,12 @@ class Movimiento extends Model
         'observacion'
     ];
     
-    protected $casts = [
-        'cantidad' => 'integer',
-    ];
-    
-    public function producto(): BelongsTo
+    public function producto()
     {
         return $this->belongsTo(Producto::class);
     }
     
-    public function user(): BelongsTo
+    public function user()
     {
         return $this->belongsTo(User::class);
     }

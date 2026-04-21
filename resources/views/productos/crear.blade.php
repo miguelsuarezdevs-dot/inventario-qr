@@ -1,75 +1,71 @@
 @extends('layouts.app')
 
-@section('title', 'Crear Producto')
+@section('title', 'Generar Sticker')
 
 @section('content')
-<div class="bg-white rounded-lg shadow p-6">
-    <h1 class="text-2xl font-bold mb-6">Crear Nuevo Producto / Sticker QR</h1>
+<div class="card">
+    <div class="card-header">🎫 Generar Sticker(s) por Unidad</div>
     
     <form method="POST" action="{{ route('productos.store') }}">
         @csrf
         
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-sm font-medium mb-1">Remesa *</label>
-                <input type="text" name="remesa" required class="w-full border rounded-lg p-2">
+        <div class="grid">
+            <div class="form-group">
+                <label>📦 Remesa * (solo números)</label>
+                <input type="text" name="remesa" required 
+                       placeholder="Ej: 276028318659"
+                       pattern="[0-9]+"
+                       oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                <div class="text-gray">Ejemplo: 276028318659</div>
             </div>
             
-            <div>
-                <label class="block text-sm font-medium mb-1">Unidades *</label>
-                <input type="number" name="unidades_iniciales" required class="w-full border rounded-lg p-2">
+            <div class="form-group">
+                <label>🏢 Sucursal * (3 letras)</label>
+                <input type="text" name="sucursal" required maxlength="3" 
+                       placeholder="Ej: BAR"
+                       oninput="this.value = this.value.toUpperCase().replace(/[^A-Z]/g, '')">
+                <div class="text-gray">Ejemplo: BAR, SUL, BOG, MED</div>
             </div>
             
-            <div>
-                <label class="block text-sm font-medium mb-1">Destinatario *</label>
-                <input type="text" name="destinatario" required class="w-full border rounded-lg p-2">
+            <div class="form-group">
+                <label>🔢 Cantidad de stickers *</label>
+                <input type="number" name="cantidad_stickers" required min="1" max="100" value="1">
+                <div class="text-gray">Número de unidades a generar (1 sticker por unidad)</div>
             </div>
             
-            <div>
-                <label class="block text-sm font-medium mb-1">Sucursal</label>
-                <input type="text" name="sucursal" class="w-full border rounded-lg p-2">
+            <div class="form-group">
+                <label>👤 Destinatario *</label>
+                <input type="text" name="destinatario" required>
             </div>
             
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium mb-1">Dirección</label>
-                <input type="text" name="direccion" class="w-full border rounded-lg p-2">
+            <div class="form-group">
+                <label>📍 Ciudad *</label>
+                <input type="text" name="ciudad" required>
             </div>
             
-            <div>
-                <label class="block text-sm font-medium mb-1">Ciudad *</label>
-                <input type="text" name="ciudad" required class="w-full border rounded-lg p-2">
+            <div class="form-group">
+                <label>🏠 Cliente *</label>
+                <input type="text" name="cliente" required>
             </div>
             
-            <div>
-                <label class="block text-sm font-medium mb-1">Cliente *</label>
-                <input type="text" name="cliente" required class="w-full border rounded-lg p-2">
+            <div class="form-group">
+                <label>📄 Documento</label>
+                <input type="text" name="documento" placeholder="Ej: 892024-3000035738392">
             </div>
             
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium mb-1">Observación</label>
-                <textarea name="observacion" rows="2" class="w-full border rounded-lg p-2"></textarea>
-            </div>
-            
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium mb-1">Documentos</label>
-                <input type="text" name="documentos" class="w-full border rounded-lg p-2">
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium mb-1">Zona</label>
-                <input type="text" name="zona" class="w-full border rounded-lg p-2">
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium mb-1">Ruta</label>
-                <input type="text" name="ruta" class="w-full border rounded-lg p-2">
+            <div class="form-group">
+                <label>📅 Fecha *</label>
+                <input type="date" name="fecha" required value="{{ date('Y-m-d') }}">
             </div>
         </div>
         
-        <div class="mt-6">
-            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg">
-                Generar Sticker QR
-            </button>
+        <div class="form-group">
+            <label>📍 Dirección *</label>
+            <input type="text" name="direccion" required>
+        </div>
+        
+        <div class="text-center" style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary">🎫 Generar Sticker(s)</button>
         </div>
     </form>
 </div>

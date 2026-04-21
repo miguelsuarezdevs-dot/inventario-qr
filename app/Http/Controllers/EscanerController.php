@@ -8,93 +8,145 @@ use Illuminate\Http\Request;
 
 class EscanerController extends Controller
 {
-    // Mostrar página del escáner
     public function index()
     {
         return view('escaner.index');
     }
-    
-    // Buscar producto por QR (para mostrar info)
+
     public function buscar(Request $request)
     {
         $request->validate([
             'codigo' => 'required|string'
         ]);
-        
+
         $producto = Producto::where('codigo_qr', $request->codigo)->first();
-        
+
         if (!$producto) {
             return response()->json([
                 'success' => false,
                 'message' => 'Producto no encontrado'
             ], 404);
         }
-        
+
+        // Obtener todas las unidades de la misma remesa
+        $unidadesRemesa = Producto::where('remesa_id', $producto->remesa_id)
+            ->orderBy('numero_unidad')
+            ->get();
+
+        // Contar escaneadas vs pendientes
+        $escaneadas = $unidadesRemesa->where('estado', 'entregado')->count();
+        $pendientes = $unidadesRemesa->where('estado', 'activo')->count();
+
+        // Lista de unidades faltantes
+        $faltantes = [];
+        foreach ($unidadesRemesa as $unidad) {
+            if ($unidad->estado === 'activo') {
+                $faltantes[] = $unidad->numero_unidad;
+            }
+        }
+
         return response()->json([
             'success' => true,
             'producto' => [
                 'id' => $producto->id,
                 'remesa' => $producto->remesa,
-                'cliente' => $producto->cliente,
+                'sucursal' => $producto->sucursal,
                 'destinatario' => $producto->destinatario,
+                'direccion' => $producto->direccion,
                 'ciudad' => $producto->ciudad,
-                'unidades_actuales' => $producto->unidades_actuales,
+                'cliente' => $producto->cliente,
+                'documento' => $producto->documento,
+                'fecha' => $producto->fecha->format('d/m/Y'),
                 'estado' => $producto->estado,
-                'ubicacion' => $producto->ubicacion_actual
+                'numero_unidad' => $producto->numero_unidad,
+                'total_unidades' => $producto->total_unidades,
+                'escaneadas' => $escaneadas,
+                'pendientes' => $pendientes,
+                'faltantes' => $faltantes
             ]
         ]);
     }
-    
-    // Procesar entrada o salida de stock
+
+    public function estadoRemesa($remesaId)
+    {
+        $unidades = Producto::where('remesa_id', $remesaId)
+            ->orderBy('numero_unidad')
+            ->get();
+
+        if ($unidades->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Remesa no encontrada'], 404);
+        }
+
+        $primera = $unidades->first();
+
+        return response()->json([
+            'success' => true,
+            'remesa_id' => $remesaId,
+            'remesa' => $primera->remesa,
+            'sucursal' => $primera->sucursal,
+            'destinatario' => $primera->destinatario,
+            'ciudad' => $primera->ciudad,
+            'total_unidades' => $unidades->count(),
+            'unidades' => $unidades->map(function ($u) {
+                return [
+                    'numero_unidad' => $u->numero_unidad,
+                    'estado' => $u->estado
+                ];
+            })
+        ]);
+    }
+
     public function procesar(Request $request)
     {
         $request->validate([
             'producto_id' => 'required|exists:productos,id',
-            'accion' => 'required|in:entrada,salida',
-            'cantidad' => 'required|integer|min:1'
+            'accion' => 'required|in:entregado,devuelto'
         ]);
-        
+
         $producto = Producto::find($request->producto_id);
-        
-        // Validar stock suficiente para salida
-        if ($request->accion === 'salida' && $producto->unidades_actuales < $request->cantidad) {
+
+        if ($request->accion === 'entregado' && $producto->estado === 'entregado') {
             return response()->json([
                 'success' => false,
-                'message' => "Stock insuficiente. Actual: {$producto->unidades_actuales} unidades"
+                'message' => '❌ Esta unidad ya fue entregada anteriormente'
             ], 400);
         }
-        
-        // Actualizar stock
-        $cantidadAnterior = $producto->unidades_actuales;
-        
-        if ($request->accion === 'entrada') {
-            $producto->unidades_actuales += $request->cantidad;
-            $producto->estado = 'activo';
-            $mensaje = "✅ Se agregaron {$request->cantidad} unidades";
-        } else {
-            $producto->unidades_actuales -= $request->cantidad;
-            if ($producto->unidades_actuales === 0) {
-                $producto->estado = 'entregado';
-            }
-            $mensaje = "✅ Se retiraron {$request->cantidad} unidades";
+
+        if ($request->accion === 'devuelto' && $producto->estado === 'devuelto') {
+            return response()->json([
+                'success' => false,
+                'message' => '❌ Esta unidad ya fue devuelta anteriormente'
+            ], 400);
         }
-        
+
+        $producto->estado = $request->accion;
         $producto->save();
-        
-        // Registrar movimiento
+
         Movimiento::create([
             'producto_id' => $producto->id,
             'user_id' => auth()->id(),
             'tipo' => $request->accion,
-            'cantidad' => $request->cantidad,
-            'observacion' => "Movimiento por escáner QR. Stock anterior: {$cantidadAnterior}"
+            'cantidad' => 1,
+            'observacion' => "Unidad {$producto->numero_unidad} de {$producto->total_unidades}"
         ]);
-        
+
+        // Obtener estadísticas actualizadas
+        $unidadesRemesa = Producto::where('remesa_id', $producto->remesa_id)->get();
+        $escaneadas = $unidadesRemesa->where('estado', 'entregado')->count();
+        $pendientes = $unidadesRemesa->where('estado', 'activo')->count();
+
+        $mensaje = $request->accion === 'entregado'
+            ? "✅ Unidad {$producto->numero_unidad} de {$producto->total_unidades} entregada"
+            : "✅ Unidad {$producto->numero_unidad} de {$producto->total_unidades} devuelta";
+
         return response()->json([
             'success' => true,
             'message' => $mensaje,
-            'stock_actual' => $producto->unidades_actuales,
-            'estado' => $producto->estado
+            'estado' => $producto->estado,
+            'numero_unidad' => $producto->numero_unidad,
+            'total_unidades' => $producto->total_unidades,
+            'escaneadas' => $escaneadas,
+            'pendientes' => $pendientes
         ]);
     }
 }
